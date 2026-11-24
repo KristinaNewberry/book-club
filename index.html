@@ -175,6 +175,8 @@
     .books-container { background:var(--warm-white); border:1px solid var(--border); border-radius:16px; overflow:hidden; }
     .book-row { display:flex; align-items:center; gap:16px; padding:14px 24px; border-bottom:1px solid #EFE8DA; transition:background .12s; }
     .book-row:last-child { border-bottom:none; }
+    .book-row .mx-cover { width:44px; box-shadow:2px 3px 8px rgba(19,32,58,.18); }
+    .book-row .mx-cover-blank span { display:none; }
     .book-row:hover { background:var(--cream); }
     .book-num { font-size:0.75rem; font-weight:600; color:var(--muted); width:22px; text-align:right; flex-shrink:0; }
     .book-swatch { width:3px; height:36px; border-radius:2px; flex-shrink:0; }
@@ -522,7 +524,8 @@
       .admin-tabs { gap:2px; }
       .profile-top { flex-direction:column; text-align:center; }
       .book-title { white-space:normal; overflow:visible; text-overflow:unset; }
-      .book-row { align-items:flex-start; }
+      .book-row { align-items:flex-start; flex-wrap:wrap; gap:12px; padding:14px 16px; }
+      .book-score-col { flex-basis:100%; padding-left:105px; }
       .upcoming-grid { grid-template-columns:1fr 1fr; gap:12px; }
       .up-card { padding:12px; }
     }
@@ -1874,7 +1877,7 @@ function coverUrlFor(title, author) {
       _coverCache[k] = url || '';
       _coverPending.delete(k);
       try { localStorage.setItem('hvr-covers-v2', JSON.stringify(_coverCache)); } catch(e) {}
-      clearTimeout(_coverTimer); _coverTimer = setTimeout(mxRender, 200);
+      clearTimeout(_coverTimer); _coverTimer = setTimeout(() => { renderBooks(); mxRender(); }, 200);
     });
   }
   return '';
@@ -2773,6 +2776,7 @@ function renderBooks() {
       <div class="book-row" onclick="_openBookByIdx(${i})" title="${hasScores ? 'Click to see individual scores' : 'Click for details'}">
         <span class="book-num">${rowNum}</span>
         <div class="book-swatch sw-${tier}"></div>
+        ${mxCover(b)}
         <div class="book-info">
           <div class="book-title">${b.title}</div>
           <div class="book-meta">${b.date}${hasScores ? ` · <span style="color:var(--pink);font-size:0.68rem;">★ ${nScores} score${nScores === 1 ? '' : 's'}</span>` : ''}</div>
