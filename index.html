@@ -1647,6 +1647,7 @@
     <form onsubmit="mxSubmitSuggest(event)">
       <div class="fg"><label class="fl">Book title *</label><input class="fi" type="text" id="mx-sg-title" required placeholder="e.g. James" /></div>
       <div class="fg"><label class="fl">Author</label><input class="fi" type="text" id="mx-sg-author" placeholder="e.g. Percival Everett" /></div>
+      <div class="fg"><label class="fl">ISBN (optional, for the cover)</label><input class="fi" type="text" id="mx-sg-cover" placeholder="e.g. 9780385550369" /></div>
       <div class="fg"><label class="fl">Why should we read it? (optional)</label><textarea class="fta" id="mx-sg-pitch" placeholder="A sentence or two"></textarea></div>
       <button type="submit" class="mx-btn" id="mx-sg-submit" style="margin-top:6px;">Post suggestion</button>
     </form>
@@ -2185,7 +2186,7 @@ function mxPickTile(r) {
   const on = mxIVoted(r.id);
   return `
     <div class="mx-ptile">
-      <button class="mx-ptile-cover" onclick="mxTab('picks')">${mxCover({ title: r.title, author: r.author })}</button>
+      <button class="mx-ptile-cover" onclick="mxTab('picks')">${mxCover({ title: r.title, author: r.author, coverUrl: r.cover_url })}</button>
       <div class="mx-ptile-title">${escHtml(r.title)}</div>
       ${MX.votesReady ? `<button class="mx-ptile-vote${on ? ' on' : ''}" onclick="mxVote(${r.id})">♥ ${mxVoteCount(r.id)}</button>` : ''}
     </div>`;
@@ -2196,7 +2197,7 @@ function mxPickCard(r, compact) {
   const on = mxIVoted(r.id);
   return `
     <div class="mx-pick">
-      ${mxCover({ title: r.title, author: r.author })}
+      ${mxCover({ title: r.title, author: r.author, coverUrl: r.cover_url })}
       <div class="mx-pick-body">
         <h5>${escHtml(r.title)}</h5>
         ${r.author ? `<p>${escHtml(r.author)}</p>` : ''}
@@ -2242,6 +2243,7 @@ function mxOpenSuggest(editId = null, asOrganizer = false) {
   document.getElementById('mx-sg-title').value  = r ? r.title || '' : '';
   document.getElementById('mx-sg-author').value = r ? r.author || '' : '';
   document.getElementById('mx-sg-pitch').value  = r ? r.pitch || '' : '';
+  document.getElementById('mx-sg-cover').value  = r ? coverInputFromUrl(r.cover_url) : '';
   document.getElementById('mx-sheet-suggest').classList.add('open');
   document.body.style.overflow = 'hidden';
   setTimeout(() => document.getElementById('mx-sg-title').focus(), 250);
@@ -2250,7 +2252,10 @@ async function mxSubmitSuggest(e) {
   e.preventDefault();
   const title = document.getElementById('mx-sg-title').value.trim();
   if (!title) return;
-  const fields = { title, author: document.getElementById('mx-sg-author').value.trim(), pitch: document.getElementById('mx-sg-pitch').value.trim() };
+  const coverText = document.getElementById('mx-sg-cover').value.trim();
+  const coverUrl = coverText ? coverUrlFromInput(coverText) : '';
+  if (coverUrl === null) { toast('The ISBN should be 10 or 13 digits (or an image link starting with https://)'); return; }
+  const fields = { title, author: document.getElementById('mx-sg-author').value.trim(), pitch: document.getElementById('mx-sg-pitch').value.trim(), cover_url: coverUrl || null };
   const editing = MX.editRecId != null;
   let error;
   if (editing) {
