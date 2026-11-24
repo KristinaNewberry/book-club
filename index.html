@@ -1882,8 +1882,11 @@ function coverUrlFor(title, author) {
 function mxCover(e, ribbon = '') {
   const url = e.coverUrl || coverUrlFor(e.title, e.author);
   const rib = ribbon ? `<span class="mx-ribbon">${ribbon}</span>` : '';
+  // The Amazon layer sits underneath, so it only shows when the Open Library cover is missing
+  const amazon = amazonCoverUrl(isbnFromCoverUrl(url));
+  const layers = [url, amazon].filter(Boolean).map(u => `url('${escHtml(u)}')`).join(',');
   return url
-    ? `<div class="mx-cover" style="background-image:url('${escHtml(url)}')">${rib}</div>`
+    ? `<div class="mx-cover" style="background-image:${layers}">${rib}</div>`
     : `<div class="mx-cover mx-cover-blank">${rib}<span>${escHtml(e.title || '')}</span></div>`;
 }
 function mxMiniStars(score, size = '') {
@@ -1896,7 +1899,7 @@ function currentReadEntry() {
   if (!m.book) return null;
   const coverUrl = m.coverUrl || (m.isbn ? `https://covers.openlibrary.org/b/isbn/${m.isbn}-L.jpg` : '');
   const existing = (DATA.books || []).find(b => norm(b.title) === norm(m.book));
-  if (existing) return { ...existing, key: String(existing.id), isCurrent: true, author: m.author, coverUrl };
+  if (existing) return { ...existing, key: String(existing.id), isCurrent: true, author: m.author, coverUrl: coverUrl || existing.coverUrl };
   return { key: 'current', title: m.book, author: m.author, date: m.date, rating: null, scores: [], isCurrent: true, coverUrl };
 }
 function scoreEntries() {
@@ -2347,10 +2350,12 @@ async function loadBooksFromSupabase() {
         title:  b.title,
         date:   b.date_read,
         rating: b.rating == null ? null : parseFloat(b.rating),  // null = not yet scored
-        scores: b.scores || []
+        scores: b.scores || [],
+        coverUrl: b.cover_url || ''
       }));
       renderBooks();
-      renderAdminBooksAll();
+      // The 20s refresh would wipe what the organizer is typing into an open edit form
+      if (_editingBookId == null) renderAdminBooksAll();
       mxRender();
     }
   } catch(e) {
@@ -3599,6 +3604,46 @@ async function removeBook(idx) {
 
 function renderAdminBooks() { renderAdminBooksAll(); }
 
+let _editingBookId = null;
+function bookEditRow(b) {
+  return `
+      <div class="book-edit-row" style="padding:12px 4px;border-bottom:1px solid rgba(255,255,255,.06);">
+        <div class="form-row">
+          <div class="fg"><label class="afl">Book Title</label><input class="afi" type="text" data-field="title" value="${escHtml(b.title)}" /></div>
+          <div class="fg"><label class="afl">Date Read (e.g. Apr 2026)</label><input class="afi" type="text" data-field="date" value="${escHtml(b.date)}" /></div>
+        </div>
+        <div class="fg"><label class="afl">ISBN or cover image link (optional)</label><input class="afi" type="text" data-field="cover" value="${escHtml(coverInputFromUrl(b.coverUrl))}" placeholder="e.g. 9781234567890. Leave blank to find the cover automatically" /></div>
+        <div style="display:flex;gap:10px;">
+          <button class="btn-act btn-act-blue btn-act-sm" onclick="saveBookEdit(${b.id}, this)">Save</button>
+          <button class="btn-act btn-act-sm" onclick="cancelBookEdit()">Cancel</button>
+        </div>
+      </div>`;
+}
+function editBook(id) { _editingBookId = id; renderAdminBooksAll(); }
+function cancelBookEdit() { _editingBookId = null; renderAdminBooksAll(); }
+
+async function saveBookEdit(id, button) {
+  const book = DATA.books.find(b => b.id === id);
+  const field = name => button.closest('.book-edit-row').querySelector(`[data-field="${name}"]`).value.trim();
+  const title = field('title'), date = field('date'), coverText = field('cover');
+  if (!title || !date) { toast('Please add a title and date.'); return; }
+  const coverUrl = coverText ? coverUrlFromInput(coverText) : '';
+  if (coverUrl === null) { toast('Cover should be an ISBN or an image link starting with https://'); return; }
+  const { error } = await db.from('books').update({ title, date_read: date, cover_url: coverUrl || null }).eq('id', id);
+  if (error) {
+    console.warn('Could not update book:', error.message);
+    toast(/cover_url/.test(error.message) ? 'Run the cover_url line from schema.sql in Supabase first.' : 'Could not save. Try again.');
+    return;
+  }
+  if (book) Object.assign(book, { title, date, coverUrl });
+  _editingBookId = null;
+  saveData();
+  renderBooks();
+  renderAdminBooksAll();
+  mxRender();
+  toast(`✓ "${title}" updated`);
+}
+
 // ════════════════════════════════════════════════════════════════
 //  TABS
 // ════════════════════════════════════════════════════════════════
@@ -4018,13 +4063,14 @@ function renderAdminBooksAll() {
   lists.forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
-    el.innerHTML = DATA.books.map((b,i) => `
+    el.innerHTML = DATA.books.map((b,i) => b.id != null && b.id === _editingBookId ? bookEditRow(b) : `
       <div style="display:flex;align-items:center;gap:12px;padding:10px 4px;border-bottom:1px solid rgba(255,255,255,.06);">
         <div style="flex:1;min-width:0;">
           <div style="color:#fff;font-size:0.88rem;font-style:italic;font-family:'Zilla Slab',Rockwell,Georgia,serif;">${b.title}</div>
           <div style="color:rgba(255,255,255,.35);font-size:0.72rem;">${b.date}${b.scores&&b.scores.length?` · ${b.scores.length} individual score${b.scores.length>1?'s':''}`:''}</div>
         </div>
         <div style="color:rgba(255,255,255,.6);font-size:0.9rem;font-weight:600;min-width:32px;text-align:right;">${b.rating == null ? 'Not scored' : b.rating.toFixed(2)}</div>
+        ${b.id != null ? `<button class="btn-act btn-act-sm" onclick="editBook(${b.id})" title="Edit">✏️</button>` : ''}
         <button class="btn-act btn-act-danger btn-act-sm" onclick="removeBook(${i})">✕</button>
       </div>`).join('');
   });
