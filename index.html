@@ -4643,9 +4643,23 @@ async function cwLoad(key) {
   renderUpcoming();
 }
 
+// The wall re-renders on every page refresh (~20s) and cover lookup; keep what the member is typing
+function captureCommentDraft() {
+  const box = document.getElementById('cw-text');
+  if (!box || box.dataset.key !== _cwOpenKey) return null;
+  return { text: box.value, focused: document.activeElement === box, start: box.selectionStart, end: box.selectionEnd };
+}
+function restoreCommentDraft(draft) {
+  const box = document.getElementById('cw-text');
+  if (!box || !draft) return;
+  box.value = draft.text;
+  if (draft.focused) { box.focus(); box.setSelectionRange(draft.start, draft.end); }
+}
+
 function cwRender() {
   const el = document.getElementById('comment-wall');
   if (!el) return;
+  const draft = captureCommentDraft();
   const u = _cwItems.find(x => x.meeting_date.replace(/-/g, '') === _cwOpenKey);
   if (!u) { el.style.display = 'none'; el.innerHTML = ''; return; }
   el.style.display = '';
@@ -4662,7 +4676,7 @@ function cwRender() {
   const me = mxMe();
   const form = me ? `
     <form class="cw-form" onsubmit="cwPost(event)">
-      <textarea id="cw-text" maxlength="2000" placeholder="What did you think? Or: why you are / aren’t coming…" required></textarea>
+      <textarea id="cw-text" data-key="${_cwOpenKey}" maxlength="2000" placeholder="What did you think? Or: why you are / aren’t coming…" required></textarea>
       <div class="cw-form-row">
         <span class="cw-as">${mxAvatar(me, 'xs')} Posting as ${escHtml(me.name)}</span>
         <button class="cw-post" id="cw-post-btn" type="submit">Post</button>
@@ -4683,6 +4697,7 @@ function cwRender() {
           </div></div>`;
       }).join('');
   el.innerHTML = head + form + `<div class="cw-list">${list}</div>`;
+  restoreCommentDraft(draft);
 }
 
 async function cwPost(e) {
@@ -4696,6 +4711,7 @@ async function cwPost(e) {
   try {
     const { error } = await db.from('meeting_comments').insert({ meeting_key: _cwOpenKey, email: norm(me.email), name: me.name, body: text.slice(0, 2000) });
     if (error) throw error;
+    ta.value = '';
     await cwLoad(_cwOpenKey);
     toast('Comment posted 💬');
   } catch(err) {
