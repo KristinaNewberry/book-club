@@ -651,6 +651,7 @@
     .up-cover-tbd span { opacity:.6; }
     .up-cover-tbd strong { font-size:2.8rem; font-weight:500; }
     .up-cover-tbd.has-title { padding:0 16px; text-align:center; gap:10px; }
+    .loc-locked { color:inherit; text-decoration:underline dotted; text-underline-offset:3px; }
     .up-cover-tbd.has-title strong { font-size:1.4rem; font-style:italic; line-height:1.2; letter-spacing:0; }
     .up-cover-tbd.has-title span { text-transform:none; letter-spacing:.02em; font-size:0.75rem; }
     footer { background:var(--sky); color:var(--muted); }
@@ -1816,6 +1817,11 @@ function renderScoreList()   { mxRender(); }
 
 // ── Who am I? ────────────────────────────────────────────────────
 function memberUnlocked() { return document.getElementById('members-content').style.display === 'block'; }
+// Addresses stay off the public page; members see them once they enter the member password
+function locationForViewer(location) {
+  if (!location) return '';
+  return memberUnlocked() ? escHtml(location) : '<a href="#members" class="loc-locked">Address shared with members</a>';
+}
 function mxEmail() { try { return norm(localStorage.getItem(RSVP_NAME_KEY) || ''); } catch(e) { return ''; } }
 function mxMe() { const e = mxEmail(); return e ? (DATA.members || []).find(m => norm(m.email) === e) || null : null; }
 function mxFirst(m) { return m && m.name ? m.name.split(' ')[0] : ''; }
@@ -2671,7 +2677,7 @@ function renderHero() {
   document.getElementById('meeting-book-author').textContent = m.author ? 'by ' + m.author : '';
   document.getElementById('meeting-date').textContent = m.date;
   document.getElementById('meeting-time').textContent = m.time;
-  document.getElementById('meeting-location').textContent = m.location || '';
+  document.getElementById('meeting-location').innerHTML = locationForViewer(m.location);
   document.getElementById('meeting-location-row').style.display = m.location ? '' : 'none';
 
   const imgEl = document.getElementById('cover-img');
@@ -2827,6 +2833,7 @@ async function checkMemberPw() {
     renderPublicPoll();
     renderPublicScoring();
     mxRender();
+    renderHero();
     _cwCountsLoaded = false; renderUpcoming();
     if (_cwOpenKey) cwLoad(_cwOpenKey);
   } else {
@@ -4563,7 +4570,7 @@ function renderUpcoming() {
         <div>
           <div class="up-date">${escHtml(upcomingDateLabel(u.meeting_date))}</div>
           <div class="up-title${u.book ? '' : ' tbd'}">${u.book ? escHtml(u.book) : 'Book to be announced'}</div>
-          <div class="up-meta">${u.author ? 'by ' + escHtml(u.author) : ''}${u.author && u.location ? '<br>' : ''}${u.location ? '📍 ' + escHtml(u.location) : ''}</div>
+          <div class="up-meta">${u.author ? 'by ' + escHtml(u.author) : ''}${u.author && u.location ? '<br>' : ''}${u.location ? '📍 ' + locationForViewer(u.location) : ''}</div>
         </div>
         ${talk}
       </div>`;
