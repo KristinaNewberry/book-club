@@ -821,7 +821,8 @@
     .mx-ptile-title { font-family:'Zilla Slab',Rockwell,Georgia,serif; font-style:italic; font-size:0.95rem; color:var(--dark); line-height:1.15; margin-top:8px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
     .mx-ptile-vote { margin-top:6px; background:#fff; border:1px solid var(--border); padding:4px 12px; font-family:'Inter',sans-serif; font-size:0.74rem; font-weight:700; color:var(--dark); cursor:pointer; }
     .mx-ptile-vote.on { background:var(--vote); border-color:var(--vote); color:var(--vote-ink); }
-    .mx-ptile-add .mx-cover-blank span { font-family:'Inter',sans-serif; font-style:normal; font-size:0.62rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--coral); }
+    .mx-ptile-add .mx-cover-blank { background:var(--dark); border:2px dashed var(--coral); }
+    .mx-ptile-add .mx-cover-blank span { font-family:'Inter',sans-serif; font-style:normal; font-size:0.7rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:#fff; }
     .mx-edit-link { display:inline-block; margin-top:8px; background:none; border:none; padding:0; color:var(--muted); font-family:'Inter',sans-serif; font-size:0.72rem; text-decoration:underline; cursor:pointer; }
     .mx-danger { color:#A83030; }
     .mx-sheet-alts { display:flex; justify-content:center; gap:22px; }
@@ -1817,10 +1818,14 @@ function renderScoreList()   { mxRender(); }
 
 // ── Who am I? ────────────────────────────────────────────────────
 function memberUnlocked() { return document.getElementById('members-content').style.display === 'block'; }
-// Addresses stay off the public page; members see them once they enter the member password
+function rememberedMember() {
+  try { return localStorage.getItem('hvr-member-pw') === MEMBER_PW; } catch(e) { return false; }
+}
+// Addresses stay off the public page; members see them once they enter the member password.
+// A remembered password counts too, so returning members don't see the address flicker in.
 function locationForViewer(location) {
   if (!location) return '';
-  return memberUnlocked() ? escHtml(location) : '<a href="#members" class="loc-locked">Address shared with members</a>';
+  return memberUnlocked() || rememberedMember() ? escHtml(location) : '<a href="#members" class="loc-locked">Address shared with members</a>';
 }
 function mxEmail() { try { return norm(localStorage.getItem(RSVP_NAME_KEY) || ''); } catch(e) { return ''; } }
 function mxMe() { const e = mxEmail(); return e ? (DATA.members || []).find(m => norm(m.email) === e) || null : null; }
@@ -4885,7 +4890,7 @@ loadRsvpFromSupabase();     // async: pulls latest RSVP responses from Google Ca
 loadUpcomingFromSupabase(); // async: upcoming meetings (homepage section + admin tab)
 // Returning members on this device skip the password (cleared automatically if the password changes)
 try {
-  if (localStorage.getItem('hvr-member-pw') === MEMBER_PW) {
+  if (rememberedMember()) {
     document.getElementById('pw-input').value = MEMBER_PW;
     setTimeout(checkMemberPw, 600);  // give members/books a moment to load first
   }
