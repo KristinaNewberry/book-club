@@ -309,6 +309,7 @@
     .afi { width:100%; font-family:'Inter',sans-serif; padding:10px 14px; border:1.5px solid rgba(255,255,255,.12); border-radius:10px; font-size:0.9rem; background:rgba(255,255,255,.07); color:#fff; outline:none; transition:border-color .2s; }
     .afi:focus { border-color:var(--admin-acc); }
     .afi::placeholder { color:rgba(255,255,255,.25); }
+    select.afi option { color:#111; }
 
     /* members table */
     .member-table { width:100%; border-collapse:collapse; }
@@ -938,8 +939,8 @@
         <div class="cover-img-wrap">
           <img id="cover-img" src="https://covers.openlibrary.org/b/isbn/0000000000-L.jpg"
                alt="Current book cover"
-               onerror="this.style.display='none';document.getElementById('cover-fb').style.display='flex';"
-               onload="if(this.naturalWidth<=1){this.style.display='none';document.getElementById('cover-fb').style.display='flex';}" />
+               onerror="if(!tryCoverFallback(this)){this.style.display='none';document.getElementById('cover-fb').style.display='flex';}"
+               onload="if(this.naturalWidth<=1&&!tryCoverFallback(this)){this.style.display='none';document.getElementById('cover-fb').style.display='flex';}" />
           <div id="cover-fb" class="cover-fallback" style="display:none;"></div>
         </div>
         <div class="hero-book-info">
@@ -1160,7 +1161,7 @@
           <div class="mx-panel" id="mx-panel-people">
             <div class="mx-label mx-label-row"><span>Our members</span><span id="mx-people-count"></span></div>
             <div class="mx-people" id="mx-people"></div>
-            <p class="mx-hint">Tap anyone to see their profile and the scores they've given.</p>
+            <p class="mx-hint">Tap anyone to see their profile and the scores they've given. <button class="mx-link" onclick="mxEditMyProfile()">Edit my profile &amp; photo →</button></p>
           </div>
         </div>
         <div id="members-grid" style="display:none;"></div>
@@ -1223,6 +1224,7 @@
         <button class="admin-tab" onclick="showTab('tab-email',this)">✉️ Email Group</button>
         <button class="admin-tab" onclick="showTab('tab-meeting',this)">📅 Next Meeting</button>
         <button class="admin-tab" onclick="showTab('tab-books',this)">📚 Add Book</button>
+        <button class="admin-tab" onclick="showTab('tab-picks',this)">💡 Book Picks</button>
         <button class="admin-tab" onclick="showTab('tab-poll',this)">📊 Date Poll</button>
         <button class="admin-tab" onclick="showTab('tab-scoring',this)">🌟 Live Scoring</button>
         <button class="admin-tab" onclick="showTab('tab-upcoming',this)">🗓 Upcoming</button>
@@ -1234,12 +1236,28 @@
         <div class="admin-card" style="padding:8px 22px;" id="org-actions"></div>
       </div>
 
-      <div id="tab-cleanup" class="admin-panel">
+      <div id="tab-picks" class="admin-panel">
+        <div class="admin-card">
+          <h4>Add a Pick for a Member</h4>
+          <p class="admin-card-sub">Got a suggestion by text or at a meeting? Add it here. It shows on the members' Picks tab under that person's name, ready for ♥s.</p>
+          <div class="form-row">
+            <div class="fg"><label class="afl">Suggested by</label><select class="afi" id="org-pick-member"></select></div>
+            <div class="fg"><label class="afl">Book Title</label><input class="afi" type="text" id="org-pick-title" /></div>
+          </div>
+          <div class="form-row">
+            <div class="fg"><label class="afl">Author (optional)</label><input class="afi" type="text" id="org-pick-author" /></div>
+            <div class="fg"><label class="afl">Why read it? (optional)</label><input class="afi" type="text" id="org-pick-pitch" /></div>
+          </div>
+          <button class="btn-act btn-act-blue" onclick="orgAddPick()">+ Add Pick</button>
+        </div>
         <div class="admin-card">
           <h4>Member picks</h4>
           <p class="admin-card-sub">Fix typos or remove duplicates. Possible duplicates are flagged. Deleting a pick also removes its ♥s.</p>
           <div id="org-clean-picks"></div>
         </div>
+      </div>
+
+      <div id="tab-cleanup" class="admin-panel">
         <div class="admin-card">
           <h4>Scores</h4>
           <p class="admin-card-sub">Remove a score someone entered by mistake — the group average updates right away. (Members can change their own score anytime on the Score tab.)</p>
@@ -1518,7 +1536,7 @@
       <div id="pm-scores-list" style="display:flex;flex-direction:column;gap:6px;max-height:260px;overflow-y:auto;"></div>
     </div>
     <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);text-align:center;">
-      <button class="btn btn-outline btn-sm" id="pm-edit-btn" onclick="editMyProfile()">✏️ Edit this profile</button>
+      <button class="btn btn-outline btn-sm" id="pm-edit-btn" onclick="editMyProfile()">✏️ Edit my profile &amp; photo</button>
     </div>
   </div>
 </div>
@@ -1528,9 +1546,9 @@
   <div class="admin-modal-card">
     <button class="admin-modal-close" onclick="closeAdminProfileModal()">✕</button>
     <div class="admin-modal-title" id="apm-title">Edit Member</div>
-    <div class="admin-modal-sub">Name, email and phone are used for invites and group texts. The profile below shows when members click a name in the Members section.</div>
+    <div class="admin-modal-sub" id="apm-sub"></div>
     <input type="hidden" id="apm-idx" value="" />
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+    <div id="apm-contact" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
       <div class="fg" style="margin-bottom:0;">
         <label class="afl">Full Name</label>
         <input class="afi" type="text" id="apm-name" placeholder="e.g. Jane Smith" />
@@ -1649,6 +1667,7 @@
 // ════════════════════════════════════════════════════════════════
 const SUPABASE_URL  = 'https://aavojvfxpltndepxmkoz.supabase.co';        // see SETUP.md step 2
 const SUPABASE_KEY  = 'sb_publishable_OAOwSmNvZzREgbVptwa6tA_BYpoYZNL';    // the "anon" key — safe to be public
+const OPEN_LIBRARY_COVERS = 'https://covers.openlibrary.org';
 // Setup check: until the database is connected, show a note instead of breaking the page
 const DB_READY = /^https:\/\/.+\.supabase\.co$/.test(SUPABASE_URL) && !SUPABASE_KEY.startsWith('PASTE_');
 if (!DB_READY) document.addEventListener('DOMContentLoaded', () => {
@@ -1952,6 +1971,8 @@ function mxRenderHome() {
   if (pollOn) rows.push(row(false, 'Vote on the next meeting date', 'Vote', "openAccordion('acc-poll');document.getElementById('acc-poll').scrollIntoView({behavior:'smooth'})"));
   if (MX.votesReady && MX.recs.length) rows.push(row(voted, voted ? '♥ Upvoted a pick' : 'Upvote a pick for next time', 'Picks', "mxTab('picks')"));
   rows.push(row(suggested, suggested ? 'Suggested a book' : 'Suggest a book', 'Suggest', 'mxOpenSuggest()'));
+  const hasPhoto = !!(me.profile && me.profile.photo);
+  rows.push(row(hasPhoto, hasPhoto ? 'Added a profile photo' : 'Add a profile photo', 'Add', 'mxEditMyProfile()'));
   document.getElementById('mx-todo').innerHTML = rows.join('');
 
   // Still to score
@@ -2644,15 +2665,16 @@ function renderHero() {
   const imgEl = document.getElementById('cover-img');
   const fbEl  = document.getElementById('cover-fb');
   fbEl.textContent = m.book;
-  if (m.coverUrl) {
-    imgEl.src = m.coverUrl;
+  const coverSrc = m.coverUrl || (m.isbn ? `${OPEN_LIBRARY_COVERS}/b/isbn/${m.isbn}-L.jpg` : '');
+  // The page re-renders every ~20s; only reload when the cover changes, or a fallen-back cover would flicker
+  if (coverSrc && imgEl.dataset.source !== coverSrc) {
+    imgEl.dataset.source   = coverSrc;
+    imgEl.dataset.fallback = amazonCoverUrl(m.isbn || isbnFromCoverUrl(m.coverUrl));
+    imgEl.src = coverSrc;
     imgEl.style.display = 'block';
     fbEl.style.display  = 'none';
-  } else if (m.isbn) {
-    imgEl.src = `https://covers.openlibrary.org/b/isbn/${m.isbn}-L.jpg`;
-    imgEl.style.display = 'block';
-    fbEl.style.display  = 'none';
-  } else {
+  } else if (!coverSrc) {
+    imgEl.dataset.source = '';
     imgEl.style.display = 'none';
     fbEl.style.display  = 'flex';
   }
@@ -2840,7 +2862,7 @@ Thanks!`)}`;
   rowsHtml.push(`<div class="org-row">📅 <span><b>${escHtml(m.date || 'No date set')}</b>${m.book ? ' · ' + escHtml(m.book) : ''}${m.location ? ' · ' + escHtml(m.location) : ''}</span><button class="btn-act btn-act-outline btn-act-sm" onclick="orgGo('tab-meeting')">Edit</button><button class="btn-act btn-act-blue btn-act-sm" onclick="sendCalendarInvite()">Send invite</button></div>`);
   if (key && noReply.length) rowsHtml.push(`<div class="org-row">✉️ <span>${noReply.length} member${noReply.length === 1 ? " hasn't" : "s haven't"} RSVP'd</span><a class="btn-act btn-act-outline btn-act-sm" href="${nudge}">Nudge them</a></div>`);
   const dupes = orgDuplicatePicks().size;
-  if (dupes) rowsHtml.push(`<div class="org-row">⚠️ <span>${dupes} picks look like duplicates</span><button class="btn-act btn-act-outline btn-act-sm" onclick="orgGo('tab-cleanup')">Clean up</button></div>`);
+  if (dupes) rowsHtml.push(`<div class="org-row">⚠️ <span>${dupes} picks look like duplicates</span><button class="btn-act btn-act-outline btn-act-sm" onclick="orgGo('tab-picks')">Clean up</button></div>`);
   if (top) rowsHtml.push(`<div class="org-row">📚 <span>Top pick: <b>${escHtml(top.title)}</b> · ♥ ${mxVoteCount(top.id)}</span><button class="btn-act btn-act-outline btn-act-sm" onclick="orgUsePick(${top.id})">Make it a meeting book</button></div>`);
   rowsHtml.push(`<div class="org-row">🗓 <span>Plan future meetings</span><button class="btn-act btn-act-outline btn-act-sm" onclick="orgGo('tab-upcoming')">Upcoming</button></div>`);
   rowsHtml.push(`<div class="org-row">👥 <span>${members.length} members</span><button class="btn-act btn-act-outline btn-act-sm" onclick="orgGo('tab-members')">Manage</button></div>`);
@@ -2852,6 +2874,29 @@ function orgDuplicatePicks() {
   MX.recs.forEach(r => { const k = bareTitle(r.title); if (seen[k]) { dupes.add(seen[k]); dupes.add(r.id); } else seen[k] = r.id; });
   return dupes;
 }
+function renderOrgPickMembers() {
+  const select = document.getElementById('org-pick-member');
+  if (!select) return;
+  const chosen = select.value;
+  const names = (DATA.members || []).map(m => m.name).sort((a, b) => a.localeCompare(b));
+  select.innerHTML = `<option value="">Choose a member…</option>` + names.map(n => `<option value="${escHtml(n)}">${escHtml(n)}</option>`).join('');
+  select.value = names.includes(chosen) ? chosen : '';
+}
+
+async function orgAddPick() {
+  const field = id => document.getElementById(id).value.trim();
+  const recommended_by = field('org-pick-member');
+  const title = field('org-pick-title');
+  if (!recommended_by) { toast('Please choose who suggested it.'); return; }
+  if (!title) { toast('Please enter a book title.'); return; }
+  const { error } = await db.from('recommendations').insert({ title, author: field('org-pick-author'), pitch: field('org-pick-pitch'), recommended_by });
+  if (error) { toast('Could not add the pick. Please try again.'); console.warn(error.message); return; }
+  ['org-pick-title', 'org-pick-author', 'org-pick-pitch'].forEach(id => document.getElementById(id).value = '');
+  toast(`✓ Added "${title}" for ${recommended_by.split(' ')[0]}`);
+  await loadRecommendations();
+  renderOrgCleanup(); renderOrgOverview();
+}
+
 function renderOrgCleanup() {
   const el = document.getElementById('org-clean-picks');
   if (!el) return;
@@ -2961,6 +3006,7 @@ function openProfileModal(idx) {
   }
 
   document.getElementById('pm-name').textContent = m.name;
+  document.getElementById('pm-edit-btn').parentElement.style.display = m === mxMe() ? '' : 'none';
   const statusEl = document.getElementById('pm-status');
   statusEl.textContent   = lbl[st];
   statusEl.className     = `profile-modal-status ${cls[st]}`;
@@ -3051,19 +3097,30 @@ function closeProfileModal(e) {
 }
 
 function editMyProfile() {
-  // Close the view modal and open the edit modal for the same member
   document.getElementById('profile-modal').classList.remove('open');
-  openAdminProfileModal(_currentProfileIdx);
+  mxEditMyProfile();
+}
+
+function mxEditMyProfile() {
+  const idx = (DATA.members || []).indexOf(mxMe());
+  if (idx >= 0) openAdminProfileModal(idx, true);
 }
 
 // ════════════════════════════════════════════════════════════════
 //  ADMIN PROFILE EDIT MODAL
 // ════════════════════════════════════════════════════════════════
-function openAdminProfileModal(idx) {
+let _apmEditingSelf = false;
+
+function openAdminProfileModal(idx, editingSelf = false) {
   const m = DATA.members[idx];
   const p = m.profile || {};
+  _apmEditingSelf = editingSelf;
   document.getElementById('apm-idx').value         = idx;
-  document.getElementById('apm-title').textContent = `Edit ${m.name}`;
+  document.getElementById('apm-title').textContent = editingSelf ? 'Edit my profile' : `Edit ${m.name}`;
+  document.getElementById('apm-sub').textContent   = editingSelf
+    ? 'Your photo and answers show to other members when they tap your name. Everything is optional.'
+    : 'Name, email and phone are used for invites and group texts. The profile below shows when members click a name in the Members section.';
+  document.getElementById('apm-contact').style.display = editingSelf ? 'none' : 'grid';
   document.getElementById('apm-name').value        = m.name    || '';
   document.getElementById('apm-email').value       = realEmail(m);
   document.getElementById('apm-phone').value       = m.phone ? prettyPhone(m.phone) : '';
@@ -3237,9 +3294,33 @@ function closeAdminProfileModal(e) {
   document.body.style.overflow = '';
 }
 
+function profileFromForm() {
+  const field = id => document.getElementById(id).value.trim();
+  return {
+    photo:     field('apm-photo'),
+    job:       field('apm-job'),
+    family:    field('apm-family'),
+    how_heard: field('apm-how'),
+    fav_book:  field('apm-favbook'),
+    fav_genre: field('apm-favgenre'),
+  };
+}
+
+async function saveOwnProfile(idx) {
+  const member = DATA.members[idx];
+  member.profile = profileFromForm();
+  saveData();
+  toast('Saving…');
+  await saveProfileToSupabase(member.email, member.profile);
+  mxRender();
+  closeAdminProfileModal();
+  toast('✓ Your profile is saved');
+}
+
 async function saveAdminProfile() {
   const idx = parseInt(document.getElementById('apm-idx').value);
   if (isNaN(idx) || !DATA.members[idx]) return;
+  if (_apmEditingSelf) { await saveOwnProfile(idx); return; }
   const oldEmail = DATA.members[idx].email;
   const newName  = document.getElementById('apm-name').value.trim();
   const typedEmail = document.getElementById('apm-email').value.trim();
@@ -3252,14 +3333,7 @@ async function saveAdminProfile() {
   else if (!typedEmail && isPhoneId(oldEmail) && phoneDigits(phoneRaw).length >= 10 && phoneId(phoneRaw) !== oldEmail) newEmail = phoneId(phoneRaw);
   if (newName)  DATA.members[idx].name  = newName;
   if (newEmail) DATA.members[idx].email = newEmail;
-  const profile = {
-    photo:     document.getElementById('apm-photo').value.trim(),
-    job:       document.getElementById('apm-job').value.trim(),
-    family:    document.getElementById('apm-family').value.trim(),
-    how_heard: document.getElementById('apm-how').value.trim(),
-    fav_book:  document.getElementById('apm-favbook').value.trim(),
-    fav_genre: document.getElementById('apm-favgenre').value.trim(),
-  };
+  const profile = profileFromForm();
   DATA.members[idx].profile = profile;
   saveData();
   // Save to Supabase so everyone sees it
@@ -3529,7 +3603,8 @@ function renderAdminBooks() { renderAdminBooksAll(); }
 //  TABS
 // ════════════════════════════════════════════════════════════════
 function showTab(id, btn) {
-  if (id === 'tab-cleanup') renderOrgCleanup();
+  if (id === 'tab-cleanup' || id === 'tab-picks') renderOrgCleanup();
+  if (id === 'tab-picks') renderOrgPickMembers();
   if (id === 'tab-overview') renderOrgOverview();
   document.querySelectorAll('.admin-panel').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.admin-tab').forEach(t=>t.classList.remove('active'));
@@ -4426,7 +4501,7 @@ function renderUpcoming() {
     const talk = `<button class="up-talk-btn${_cwOpenKey === key ? ' on' : ''}" onclick="cwToggle('${key}')">💬 ${n ? n + (n === 1 ? ' comment' : ' comments') : 'Discuss'}</button>`;
     const fallback = upcomingCoverFallback(u);
     const cover = u.cover_url
-      ? `<img src="${escHtml(u.cover_url)}" alt="${escHtml(u.book || 'Book')} cover" onerror="this.nextElementSibling.style.display='';this.remove()" /><div style="display:none;width:100%;height:100%;">${fallback}</div>`
+      ? `<img src="${escHtml(u.cover_url)}" alt="${escHtml(u.book || 'Book')} cover" data-fallback="${escHtml(amazonCoverUrl(isbnFromCoverUrl(u.cover_url)))}" onerror="if(!tryCoverFallback(this)){this.nextElementSibling.style.display='';this.remove()}" onload="if(this.naturalWidth<=1&&!tryCoverFallback(this)){this.nextElementSibling.style.display='';this.remove()}" /><div style="display:none;width:100%;height:100%;">${fallback}</div>`
       : fallback;
     return `
       <div class="up-card${u.isNext ? ' next' : ''}">
@@ -4620,7 +4695,34 @@ async function findCoverUrl(book, author) {
   } catch(e) { return null; }
 }
 
-const OPEN_LIBRARY_COVERS = 'https://covers.openlibrary.org';
+function isbnFromCoverUrl(url) {
+  const isbnMatch = (url || '').match(/\/b\/isbn\/([\dXx]+)-L\.jpg/);
+  return isbnMatch ? isbnMatch[1] : '';
+}
+
+function isbn10From(isbn) {
+  const digits = (isbn || '').toUpperCase();
+  if (/^\d{9}[\dX]$/.test(digits)) return digits;
+  if (!/^978\d{10}$/.test(digits)) return '';
+  const core = digits.slice(3, 12);
+  const sum = [...core].reduce((total, d, i) => total + Number(d) * (10 - i), 0);
+  const check = (11 - sum % 11) % 11;
+  return core + (check === 10 ? 'X' : check);
+}
+
+// Amazon has covers for many newer books Open Library lacks, keyed by ISBN-10; it answers a 1×1 image when it has none
+function amazonCoverUrl(isbn) {
+  const isbn10 = isbn10From(isbn);
+  return isbn10 ? `https://images-na.ssl-images-amazon.com/images/P/${isbn10}.01.L.jpg` : '';
+}
+
+function tryCoverFallback(img) {
+  const next = img.dataset.fallback;
+  if (!next) return false;
+  img.dataset.fallback = '';
+  img.src = next;
+  return true;
+}
 
 // Open Library serves a blank 1×1 image for unknown ISBNs unless default=false, which makes it a 404 instead
 function coverUrlFromInput(text) {
@@ -4632,8 +4734,7 @@ function coverUrlFromInput(text) {
 // Covers found by the automatic title search aren't shown, so changing the book still triggers a fresh search
 function coverInputFromUrl(url) {
   if (!url || url.startsWith(`${OPEN_LIBRARY_COVERS}/b/id/`)) return '';
-  const isbnMatch = url.match(/\/b\/isbn\/([\dXx]+)-L\.jpg/);
-  return isbnMatch ? isbnMatch[1] : url;
+  return isbnFromCoverUrl(url) || url;
 }
 
 async function saveUpcoming() {
