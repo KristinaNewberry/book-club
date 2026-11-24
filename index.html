@@ -4622,14 +4622,18 @@ async function cwToggle(key) {
   }
 }
 
+// Page load, unlocking and posting can each start a load; a slow earlier one must not overwrite a newer one
+let _cwLoadSeq = 0;
 async function cwLoad(key) {
   if (!memberUnlocked()) { cwRender(); return; }
-  _cwLoading = true; _cwComments = []; cwRender();
+  const seq = ++_cwLoadSeq;
+  _cwLoading = true; cwRender();
   try {
     const [c, r] = await Promise.all([
       db.from('meeting_comments').select('*').eq('meeting_key', key).order('created_at', { ascending: true }),
       db.from('member_rsvps').select('email,status').eq('meeting_key', key)
     ]);
+    if (seq !== _cwLoadSeq) return;
     if (c.error) throw c.error;
     _cwComments = c.data || [];
     _cwRsvps = {};
@@ -4637,6 +4641,7 @@ async function cwLoad(key) {
     _cwCounts[key] = _cwComments.length;
   } catch(e) {
     console.warn('Could not load comments:', e.message);
+    _cwComments = [];
     toast('Comments aren’t set up yet.');
   }
   _cwLoading = false;
